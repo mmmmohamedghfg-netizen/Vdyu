@@ -1,0 +1,713 @@
+name: Build Android APK with AI
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Generate Project Files
+        run: |
+          mkdir -p app/src/main/java/com/aipromusic/player
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
+
+          cat << 'EOF' > build.gradle.kts
+          plugins { id("com.android.application") version "8.1.1" apply false; id("org.jetbrains.kotlin.android") version "1.9.0" apply false }
+          EOF
+
+          cat << 'EOF' > settings.gradle.kts
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "AiProMusicPlayer"
+          include(":app")
+          EOF
+
+          cat << 'EOF' > gradle.properties
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+
+          cat << 'EOF' > app/build.gradle.kts
+          plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
+
+          android {
+              namespace = "com.aipromusic.player"
+              compileSdk = 34
+              defaultConfig { applicationId = "com.aipromusic.player"; minSdk = 24; targetSdk = 34; versionCode = 3; versionName = "3.0 API Edition" }
+              buildTypes { release { isMinifyEnabled = false; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") } }
+              compileOptions { sourceCompatibility = JavaVersion.VERSION_1_8; targetCompatibility = JavaVersion.VERSION_1_8 }
+              kotlinOptions { jvmTarget = "1.8" }
+          }
+
+          dependencies {
+              implementation("androidx.core:core-ktx:1.12.0")
+              implementation("androidx.appcompat:appcompat:1.6.1")
+              implementation("com.google.android.material:material:1.11.0")
+              implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+              implementation("androidx.recyclerview:recyclerview:1.3.2")
+              implementation("com.google.ai.client.generativeai:generativeai:0.7.0")
+              implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+              implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.aipromusic.player">
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+              <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+              <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+              <uses-permission android:name="android.permission.INTERNET" />
+
+              <application android:allowBackup="true" android:icon="@drawable/ic_launcher" android:roundIcon="@drawable/ic_launcher" android:label="Ai Pro Music" android:supportsRtl="true" android:theme="@style/Theme.AiProMusicPlayer">
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter> <action android:name="android.intent.action.MAIN" /> <category android:name="android.intent.category.LAUNCHER" /> </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/values/colors.xml
+          <resources><color name="dub_dark_grey">#1E1E24</color><color name="dub_black">#121214</color><color name="dub_darker_black">#09090A</color><color name="dub_red">#E53935</color><color name="dub_green">#76FF03</color><color name="text_white">#FFFFFF</color><color name="text_light_gray">#B0B0B0</color><color name="text_dim">#666666</color><color name="ai_blue">#00E5FF</color><color name="player_dark">#23232F</color></resources>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/values/themes.xml
+          <resources><style name="Theme.AiProMusicPlayer" parent="Theme.MaterialComponents.DayNight.NoActionBar"><item name="colorPrimary">@color/dub_red</item><item name="colorPrimaryVariant">@color/dub_black</item><item name="colorOnPrimary">@color/text_white</item><item name="android:statusBarColor">@color/dub_darker_black</item><item name="android:windowBackground">@color/dub_black</item></style></resources>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/drawable/bg_dub_panel.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"><gradient android:startColor="#2A2D34" android:endColor="#15171C" android:angle="270"/><corners android:radius="12dp"/><stroke android:width="1.5dp" android:color="#444855"/></shape>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/drawable/bg_circular_knob.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval"><gradient android:type="radial" android:gradientRadius="140dp" android:startColor="#4A4E5A" android:endColor="#1E2024"/><stroke android:width="4dp" android:color="#0F1012"/></shape>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/drawable/bg_red_indicator.xml
+          <shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="@color/dub_red"/><corners android:radius="2dp"/></shape>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/drawable/ic_launcher.xml
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#E53935" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2z"/><path android:fillColor="#FFFFFF" android:pathData="M12 4c-4.41 0-8 3.59-8 8s3.59 8 8 8 8-3.59 8-8-3.59-8-8-8zm0 12.5c-2.48 0-4.5-2.02-4.5-4.5S9.52 7.5 12 7.5s4.5 2.02 4.5 4.5-2.02 4.5-4.5 4.5zm-1.5-6h3v4.5c0 .83-.67 1.5-1.5 1.5s-1.5-.67-1.5-1.5v-4.5z"/></vector>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/layout/item_song.xml
+          <?xml version="1.0" encoding="utf-8"?><LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="16dp" android:background="?attr/selectableItemBackground" android:gravity="center_vertical"><TextView android:id="@+id/tvIndex" android:layout_width="32dp" android:layout_height="wrap_content" android:text="01" android:textColor="@color/text_dim" android:textSize="14sp" android:textStyle="bold" /><LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:orientation="vertical" android:layout_weight="1" android:layout_marginEnd="8dp"><TextView android:id="@+id/tvSongTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Song Title" android:textColor="@color/text_white" android:textSize="15sp" android:textStyle="bold" android:singleLine="true" android:ellipsize="marquee" /><TextView android:id="@+id/tvArtist" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Artist Name" android:textColor="@color/text_light_gray" android:textSize="13sp" android:layout_marginTop="2dp" android:singleLine="true" /></LinearLayout><ImageView android:id="@+id/btnFavorite" android:layout_width="24dp" android:layout_height="24dp" android:src="@android:drawable/btn_star_big_off" android:contentDescription="favorite" /></LinearLayout>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/layout/item_folder.xml
+          <?xml version="1.0" encoding="utf-8"?><LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="16dp" android:background="?attr/selectableItemBackground" android:gravity="center_vertical"><ImageView android:layout_width="36dp" android:layout_height="36dp" android:src="@android:drawable/ic_menu_manage" android:tint="@color/text_light_gray"/><LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:orientation="vertical" android:layout_weight="1" android:layout_marginStart="16dp"><TextView android:id="@+id/tvFolderName" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Folder Name" android:textColor="@color/text_white" android:textSize="16sp" android:textStyle="bold" /><TextView android:id="@+id/tvFolderCount" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="0 Songs" android:textColor="@color/text_dim" android:textSize="13sp" android:layout_marginTop="2dp" /></LinearLayout></LinearLayout>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/layout/item_playlist.xml
+          <?xml version="1.0" encoding="utf-8"?><LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="16dp" android:background="?attr/selectableItemBackground" android:gravity="center_vertical"><ImageView android:layout_width="36dp" android:layout_height="36dp" android:src="@android:drawable/ic_menu_sort_by_size" android:tint="@color/dub_red" /><LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:orientation="vertical" android:layout_weight="1" android:layout_marginStart="16dp"><TextView android:id="@+id/tvPlaylistName" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Playlist Name" android:textColor="@color/text_white" android:textSize="16sp" android:textStyle="bold" /></LinearLayout></LinearLayout>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/layout/dialog_eq.xml
+          <?xml version="1.0" encoding="utf-8"?><ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@color/dub_black" android:padding="20dp"><LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"><TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="استوديو الصوت (EQ &amp; 3D)" android:textColor="@color/text_white" android:textSize="20sp" android:textStyle="bold" android:gravity="center" android:layout_marginBottom="16dp"/><Button android:id="@+id/btnAiAutoTune" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="✨ تفعيل التحسين بالذكاء الاصطناعي ✨" android:backgroundTint="@color/ai_blue" android:textColor="@color/dub_black" android:textStyle="bold" android:layout_marginBottom="16dp"/><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="مضخم الصوت (Bass Boost)" android:textColor="@color/dub_red" android:layout_marginTop="8dp"/><SeekBar android:id="@+id/sbBass" android:layout_width="match_parent" android:layout_height="wrap_content" android:progressTint="@color/dub_red" android:thumbTint="@color/dub_red"/><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="الصوت المحيطي (3D Virtualizer)" android:textColor="@color/dub_green" android:layout_marginTop="16dp"/><SeekBar android:id="@+id/sb3D" android:layout_width="match_parent" android:layout_height="wrap_content" android:progressTint="@color/dub_green" android:thumbTint="@color/dub_green"/><TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="المعادل الصوتي (Equalizer)" android:textColor="@color/text_white" android:layout_marginTop="24dp" android:layout_marginBottom="8dp"/><LinearLayout android:id="@+id/eqContainer" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"/><Button android:id="@+id/btnCloseEq" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="إغلاق" android:layout_marginTop="24dp" android:backgroundTint="@color/dub_dark_grey"/></LinearLayout></ScrollView>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/layout/activity_main.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/dub_darker_black">
+              <RelativeLayout android:id="@+id/toolbar" android:layout_width="match_parent" android:layout_height="56dp" android:background="@color/dub_black" android:paddingHorizontal="16dp">
+                  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_centerVertical="true" android:text="Ai Pro Music 🎵" android:textColor="@color/text_white" android:textSize="20sp" android:textStyle="bold" />
+              </RelativeLayout>
+              <LinearLayout android:id="@+id/tabLayout" android:layout_width="match_parent" android:layout_height="48dp" android:layout_below="@id/toolbar" android:orientation="horizontal" android:background="@color/dub_black" android:weightSum="3">
+                  <LinearLayout android:id="@+id/tabSongs" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                      <TextView android:id="@+id/tvTabSongs" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="الأغاني" android:textColor="@color/text_white" android:textStyle="bold" />
+                      <View android:id="@+id/indSongs" android:layout_width="48dp" android:layout_height="3dp" android:layout_marginTop="4dp" android:background="@color/dub_red" />
+                  </LinearLayout>
+                  <LinearLayout android:id="@+id/tabFolders" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                      <TextView android:id="@+id/tvTabFolders" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="المجلدات" android:textColor="@color/text_light_gray" />
+                      <View android:id="@+id/indFolders" android:layout_width="48dp" android:layout_height="3dp" android:layout_marginTop="4dp" android:background="@android:color/transparent" />
+                  </LinearLayout>
+                  <LinearLayout android:id="@+id/tabPlaylists" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:orientation="vertical">
+                      <TextView android:id="@+id/tvTabPlaylists" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="قوائم التشغيل" android:textColor="@color/text_light_gray" />
+                      <View android:id="@+id/indPlaylists" android:layout_width="64dp" android:layout_height="3dp" android:layout_marginTop="4dp" android:background="@android:color/transparent" />
+                  </LinearLayout>
+              </LinearLayout>
+              
+              <FrameLayout android:id="@+id/container" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_below="@id/tabLayout" android:layout_above="@+id/miniPlayer">
+                  <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvSongs" android:layout_width="match_parent" android:layout_height="match_parent" />
+                  <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvFolders" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone" />
+                  <RelativeLayout android:id="@+id/layoutPlaylists" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
+                      <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvPlaylists" android:layout_width="match_parent" android:layout_height="match_parent" />
+                      <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@+id/fabAddPlaylist" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_alignParentBottom="true" android:layout_alignParentEnd="true" android:layout_margin="24dp" android:src="@android:drawable/ic_input_add" app:backgroundTint="@color/dub_red" app:tint="@color/text_white" />
+                  </RelativeLayout>
+              </FrameLayout>
+              
+              <com.google.android.material.floatingactionbutton.FloatingActionButton
+                  android:id="@+id/fabAiMood"
+                  android:layout_width="wrap_content"
+                  android:layout_height="wrap_content"
+                  android:layout_above="@+id/miniPlayer"
+                  android:layout_alignParentEnd="true"
+                  android:layout_margin="24dp"
+                  android:src="@android:drawable/ic_menu_compass"
+                  app:backgroundTint="@color/ai_blue"
+                  app:tint="@color/dub_black" />
+
+              <RelativeLayout android:id="@+id/miniPlayer" android:layout_width="match_parent" android:layout_height="72dp" android:layout_alignParentBottom="true" android:background="@color/dub_black" android:padding="8dp" android:visibility="gone">
+                  <ImageView android:id="@+id/ivMiniIcon" android:layout_width="56dp" android:layout_height="56dp" android:src="@android:drawable/ic_media_play" android:tint="@color/dub_red" />
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_toEndOf="@id/ivMiniIcon" android:layout_toStartOf="@+id/btnMiniPlay" android:layout_marginStart="12dp" android:layout_centerVertical="true">
+                      <TextView android:id="@+id/tvMiniTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Song Title" android:textColor="@color/text_white" android:textSize="14sp" android:textStyle="bold" android:singleLine="true" />
+                      <TextView android:id="@+id/tvMiniArtist" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Artist" android:textColor="@color/text_light_gray" android:textSize="12sp" android:singleLine="true" />
+                  </LinearLayout>
+                  <ImageButton android:id="@+id/btnMiniPlay" android:layout_width="48dp" android:layout_height="48dp" android:layout_alignParentEnd="true" android:layout_centerVertical="true" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_media_pause" android:tint="@color/text_white" />
+              </RelativeLayout>
+
+              <RelativeLayout android:id="@+id/playerScreen" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/dub_darker_black" android:visibility="gone">
+                  <RelativeLayout android:id="@+id/backBar" android:layout_width="match_parent" android:layout_height="56dp" android:paddingHorizontal="16dp">
+                      <ImageButton android:id="@+id/btnBack" android:layout_width="48dp" android:layout_height="48dp" android:layout_centerVertical="true" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_menu_revert" android:tint="@color/text_white" />
+                      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_centerInParent="true" android:text="المشغل الصوتي" android:textColor="@color/text_white" android:textSize="18sp" android:textStyle="bold" />
+                  </RelativeLayout>
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:layout_below="@id/backBar" android:orientation="vertical" android:padding="24dp" android:gravity="center_horizontal" android:weightSum="10">
+                      <TextView android:id="@+id/tvFullTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_weight="1" android:text="Song Title" android:textColor="@color/text_white" android:textSize="20sp" android:textStyle="bold" android:gravity="center" android:singleLine="true" />
+                      <TextView android:id="@+id/tvFullArtist" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_weight="0.5" android:text="Artist Name" android:textColor="@color/text_light_gray" android:textSize="15sp" android:gravity="center" />
+                      
+                      <RelativeLayout android:layout_width="240dp" android:layout_height="240dp" android:layout_weight="5" android:layout_marginVertical="8dp" android:background="@drawable/bg_dub_panel" android:gravity="center">
+                          <View android:id="@+id/knobOuter" android:layout_width="180dp" android:layout_height="180dp" android:background="@drawable/bg_circular_knob" />
+                          <View android:id="@+id/knobPointer" android:layout_width="14dp" android:layout_height="14dp" android:layout_alignParentTop="true" android:layout_centerHorizontal="true" android:layout_marginTop="32dp" android:background="@drawable/bg_red_indicator" />
+                      </RelativeLayout>
+                      
+                      <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center" android:layout_weight="0.5" android:layout_marginVertical="8dp">
+                          <Button android:id="@+id/btnEq" android:layout_width="wrap_content" android:layout_height="wrap_content" text="🎚️ المعادل (EQ)" android:backgroundTint="@color/dub_dark_grey" android:textColor="@color/text_white"/>
+                      </LinearLayout>
+
+                      <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="horizontal" android:gravity="center_vertical">
+                          <TextView android:id="@+id/tvCurrentTime" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="00:00" android:textColor="@color/dub_green" android:textSize="12sp" />
+                          <SeekBar android:id="@+id/seekBarPlay" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:progressTint="@color/dub_green" android:thumbTint="@color/dub_green" />
+                          <TextView android:id="@+id/tvTotalTime" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="-00:00" android:textColor="@color/dub_red" android:textSize="12sp" />
+                      </LinearLayout>
+                      <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_weight="2" android:orientation="horizontal" android:gravity="center" android:layout_marginTop="4dp">
+                          <ImageButton android:id="@+id/btnPrev" android:layout_width="56dp" android:layout_height="56dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_media_previous" android:tint="@color/text_white" />
+                          <ImageButton android:id="@+id/btnPlay" android:layout_width="72dp" android:layout_height="72dp" android:layout_marginHorizontal="24dp" android:background="@drawable/bg_dub_panel" android:src="@android:drawable/ic_media_play" android:tint="@color/dub_green" />
+                          <ImageButton android:id="@+id/btnNext" android:layout_width="56dp" android:layout_height="56dp" android:background="?attr/selectableItemBackgroundBorderless" android:src="@android:drawable/ic_media_next" android:tint="@color/text_white" />
+                      </LinearLayout>
+                  </LinearLayout>
+              </RelativeLayout>
+          </RelativeLayout>
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/aipromusic/player/Song.kt
+          package com.aipromusic.player
+          data class Song(val id: Long, val title: String, val artist: String, val path: String, val folder: String, var isFavorite: Boolean = false)
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/aipromusic/player/SongAdapter.kt
+          package com.aipromusic.player
+          import android.view.LayoutInflater; import android.view.View; import android.view.ViewGroup; import android.widget.ImageView; import android.widget.TextView; import androidx.recyclerview.widget.RecyclerView
+          class SongAdapter(private var songs: List<Song>, private val onSongClick: (Song) -> Unit, private val onFavoriteClick: (Song, Int) -> Unit) : RecyclerView.Adapter<SongAdapter.SongViewHolder>() {
+              class SongViewHolder(view: View) : RecyclerView.ViewHolder(view) { val tvIndex: TextView = view.findViewById(R.id.tvIndex); val tvTitle: TextView = view.findViewById(R.id.tvSongTitle); val tvArtist: TextView = view.findViewById(R.id.tvArtist); val btnFav: ImageView = view.findViewById(R.id.btnFavorite) }
+              override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SongViewHolder = SongViewHolder(LayoutInflater.from(parent.context).inflate(R.layout.item_song, parent, false))
+              override fun onBindViewHolder(holder: SongViewHolder, position: Int) { val song = songs[position]; holder.tvIndex.text = String.format("%02d", position + 1); holder.tvTitle.text = song.title; holder.tvArtist.text = song.artist; holder.btnFav.setImageResource(if (song.isFavorite) android.R.drawable.btn_star_big_on else android.R.drawable.btn_star_big_off); holder.itemView.setOnClickListener { onSongClick(song) }; holder.btnFav.setOnClickListener { onFavoriteClick(song, position) } }
+              override fun getItemCount(): Int = songs.size
+              fun updateList(newList: List<Song>) { songs = newList; notifyDataSetChanged() }
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/aipromusic/player/FolderAdapter.kt
+          package com.aipromusic.player
+          import android.view.LayoutInflater; import android.view.View; import android.view.ViewGroup; import android.widget.TextView; import androidx.recyclerview.widget.RecyclerView
+          class FolderAdapter(private val folders: List<Pair<String, List<Song>>>, private val onFolderClick: (List<Song>) -> Unit) : RecyclerView.Adapter<FolderAdapter.FolderViewHolder>() {
+              class FolderViewHolder(view: View) : RecyclerView.ViewHolder(view) { val tvFolderName: TextView = view.findViewById(R.id.tvFolderName); val tvFolderCount: TextView = view.findViewById(R.id.tvFolderCount) }
+              override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): FolderViewHolder = FolderViewHolder(LayoutInflater.from(parent.context).inflate(R.layout.item_folder, parent, false))
+              override fun onBindViewHolder(holder: FolderViewHolder, position: Int) { val (folderName, songs) = folders[position]; holder.tvFolderName.text = folderName; holder.tvFolderCount.text = "${songs.size} أغانٍ"; holder.itemView.setOnClickListener { onFolderClick(songs) } }
+              override fun getItemCount(): Int = folders.size
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/aipromusic/player/PlaylistAdapter.kt
+          package com.aipromusic.player
+          import android.view.LayoutInflater; import android.view.View; import android.view.ViewGroup; import android.widget.TextView; import androidx.recyclerview.widget.RecyclerView
+          class PlaylistAdapter(private val playlists: List<Pair<String, List<Song>>>, private val onPlaylistClick: (List<Song>) -> Unit) : RecyclerView.Adapter<PlaylistAdapter.PlaylistViewHolder>() {
+              class PlaylistViewHolder(view: View) : RecyclerView.ViewHolder(view) { val tvPlaylistName: TextView = view.findViewById(R.id.tvPlaylistName) }
+              override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PlaylistViewHolder = PlaylistViewHolder(LayoutInflater.from(parent.context).inflate(R.layout.item_playlist, parent, false))
+              override fun onBindViewHolder(holder: PlaylistViewHolder, position: Int) { val (playlistName, songs) = playlists[position]; holder.tvPlaylistName.text = playlistName; holder.itemView.setOnClickListener { onPlaylistClick(songs) } }
+              override fun getItemCount(): Int = playlists.size
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/aipromusic/player/MainActivity.kt
+          package com.aipromusic.player
+
+          import android.Manifest
+          import android.content.Context
+          import android.content.pm.PackageManager
+          import android.media.MediaPlayer
+          import android.media.audiofx.BassBoost
+          import android.media.audiofx.Equalizer
+          import android.media.audiofx.Virtualizer
+          import android.os.Build
+          import android.os.Bundle
+          import android.os.Handler
+          import android.os.Looper
+          import android.provider.MediaStore
+          import android.view.View
+          import android.view.animation.RotateAnimation
+          import android.widget.*
+          import androidx.appcompat.app.AlertDialog
+          import androidx.appcompat.app.AppCompatActivity
+          import androidx.core.app.ActivityCompat
+          import androidx.core.content.ContextCompat
+          import androidx.recyclerview.widget.LinearLayoutManager
+          import androidx.recyclerview.widget.RecyclerView
+          import androidx.lifecycle.lifecycleScope
+          import com.google.ai.client.generativeai.GenerativeModel
+          import kotlinx.coroutines.launch
+          import java.io.File
+          import java.io.IOException
+          import android.view.LayoutInflater
+
+          class MainActivity : AppCompatActivity() {
+
+              // حط مفتاح الـ API هنا بدلاً من placeholder لو حابب تفعّل الذكاء الاصطناعي
+              private val GEMINI_API_KEY = "ضع_مفتاح_الـ_API_هنا"
+
+              private val PERMISSION_REQUEST_CODE = 123
+              private lateinit var rvSongs: RecyclerView
+              private lateinit var rvFolders: RecyclerView
+              private lateinit var rvPlaylists: RecyclerView
+              private lateinit var layoutPlaylists: View
+              private lateinit var fabAddPlaylist: View
+              private lateinit var fabAiMood: View
+
+              private lateinit var miniPlayer: View
+              private lateinit var tvMiniTitle: TextView
+              private lateinit var tvMiniArtist: TextView
+              private lateinit var btnMiniPlay: ImageButton
+
+              private lateinit var playerScreen: View
+              private lateinit var tvFullTitle: TextView
+              private lateinit var tvFullArtist: TextView
+              private lateinit var seekBarPlay: SeekBar
+              private lateinit var tvCurrentTime: TextView
+              private lateinit var tvTotalTime: TextView
+              private lateinit var btnPlay: ImageButton
+              private lateinit var knobOuter: View
+
+              private var mediaPlayer: MediaPlayer? = null
+              
+              private var equalizer: Equalizer? = null
+              private var bassBoost: BassBoost? = null
+              private var virtualizer: Virtualizer? = null
+
+              private var allSongs = mutableListOf<Song>()
+              private var foldersMap = mutableMapOf<String, MutableList<Song>>()
+              private var customPlaylists = mutableMapOf<String, MutableList<Song>>()
+              private var currentPlaylist = mutableListOf<Song>()
+              private var currentSongIndex = -1
+
+              private val handler = Handler(Looper.getMainLooper())
+              private var adapterSongs: SongAdapter? = null
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContentView(R.layout.activity_main)
+
+                  rvSongs = findViewById(R.id.rvSongs)
+                  rvFolders = findViewById(R.id.rvFolders)
+                  rvPlaylists = findViewById(R.id.rvPlaylists)
+                  layoutPlaylists = findViewById(R.id.layoutPlaylists)
+                  fabAddPlaylist = findViewById(R.id.fabAddPlaylist)
+                  fabAiMood = findViewById(R.id.fabAiMood)
+
+                  miniPlayer = findViewById(R.id.miniPlayer)
+                  tvMiniTitle = findViewById(R.id.tvMiniTitle)
+                  tvMiniArtist = findViewById(R.id.tvMiniArtist)
+                  btnMiniPlay = findViewById(R.id.btnMiniPlay)
+
+                  playerScreen = findViewById(R.id.playerScreen)
+                  tvFullTitle = findViewById(R.id.tvFullTitle)
+                  tvFullArtist = findViewById(R.id.tvFullArtist)
+                  seekBarPlay = findViewById(R.id.seekBarPlay)
+                  tvCurrentTime = findViewById(R.id.tvCurrentTime)
+                  tvTotalTime = findViewById(R.id.tvTotalTime)
+                  btnPlay = findViewById(R.id.btnPlay)
+                  knobOuter = findViewById(R.id.knobOuter)
+
+                  rvSongs.layoutManager = LinearLayoutManager(this)
+                  rvFolders.layoutManager = LinearLayoutManager(this)
+                  rvPlaylists.layoutManager = LinearLayoutManager(this)
+
+                  setupNavigationTabs()
+                  setupPlayerControls()
+                  setupFavoritesAndPlaylists()
+                  
+                  findViewById<Button>(R.id.btnEq).setOnClickListener { showEqDialog() }
+                  
+                  fabAiMood.setOnClickListener { showAiMoodDialog() }
+
+                  checkPermissions()
+              }
+
+              private fun showAiMoodDialog() {
+                  if (GEMINI_API_KEY.startsWith("ضع_") || GEMINI_API_KEY.isEmpty()) {
+                      Toast.makeText(this, "برجاء وضع API Key الخاص بك أولاً داخل الكود!", Toast.LENGTH_LONG).show()
+                      return
+                  }
+
+                  val input = EditText(this)
+                  input.hint = "مثال: محتاج أغاني حماسية للجيم"
+                  AlertDialog.Builder(this)
+                      .setTitle("✨ منسق الأغاني الذكي (AI DJ)")
+                      .setMessage("اكتب مودك دلوقتي أو بتعمل إيه، والذكاء الاصطناعي هيعملك قائمة تشغيل مخصوصة من أغانيك!")
+                      .setView(input)
+                      .setPositiveButton("يلا بينا") { _, _ ->
+                          val mood = input.text.toString().trim()
+                          if (mood.isNotEmpty()) {
+                              generateAiPlaylist(mood)
+                          }
+                      }
+                      .setNegativeButton("إلغاء", null)
+                      .show()
+              }
+
+              private fun generateAiPlaylist(mood: String) {
+                  Toast.makeText(this, "جاري تحليل الأغاني باستخدام الذكاء الاصطناعي... ⏳", Toast.LENGTH_LONG).show()
+                  
+                  lifecycleScope.launch {
+                      try {
+                          val model = GenerativeModel("gemini-1.5-flash", GEMINI_API_KEY)
+                          
+                          val songTitles = allSongs.map { it.title }.joinToString(", ")
+                          
+                          val prompt = "لدي هذه الأغاني على هاتفي: " + songTitles + ". \nالمستخدم يقول: '" + mood + "'. \nمن فضلك اختر فقط أسماء الأغاني التي تناسب هذا المود، وقم بالرد بأسماء الأغاني فقط مفصولة بفاصلة (,) بدون أي كلمات أخرى."
+                          
+                          val response = model.generateContent(prompt)
+                          val aiText = response.text ?: ""
+                          
+                          val selectedTitles = aiText.split(",").map { it.trim() }
+                          val aiPlaylist = allSongs.filter { selectedTitles.contains(it.title) }
+                          
+                          if (aiPlaylist.isNotEmpty()) {
+                              currentPlaylist = aiPlaylist.toMutableList()
+                              currentSongIndex = 0
+                              playSong(currentPlaylist[0])
+                              rvSongs.visibility = View.VISIBLE
+                              rvFolders.visibility = View.GONE
+                              layoutPlaylists.visibility = View.GONE
+                              adapterSongs?.updateList(currentPlaylist)
+                              Toast.makeText(this@MainActivity, "✨ تم تشغيل قائمة الذكاء الاصطناعي! (${aiPlaylist.size} أغنية)", Toast.LENGTH_LONG).show()
+                          } else {
+                              Toast.makeText(this@MainActivity, "لم يجد الذكاء الاصطناعي أغاني مطابقة تماماً للمود، جرب وصف تاني.", Toast.LENGTH_LONG).show()
+                          }
+                      } catch (e: Exception) {
+                          Toast.makeText(this@MainActivity, "حدث خطأ في الاتصال بالذكاء الاصطناعي: " + e.message, Toast.LENGTH_LONG).show()
+                      }
+                  }
+              }
+
+              private fun setupNavigationTabs() {
+                  val tabSongs = findViewById<View>(R.id.tabSongs)
+                  val tabFolders = findViewById<View>(R.id.tabFolders)
+                  val tabPlaylists = findViewById<View>(R.id.tabPlaylists)
+                  val tvTabSongs = findViewById<TextView>(R.id.tvTabSongs)
+                  val tvTabFolders = findViewById<TextView>(R.id.tvTabFolders)
+                  val tvTabPlaylists = findViewById<TextView>(R.id.tvTabPlaylists)
+                  val indSongs = findViewById<View>(R.id.indSongs)
+                  val indFolders = findViewById<View>(R.id.indFolders)
+                  val indPlaylists = findViewById<View>(R.id.indPlaylists)
+
+                  tabSongs.setOnClickListener {
+                      rvSongs.visibility = View.VISIBLE; rvFolders.visibility = View.GONE; layoutPlaylists.visibility = View.GONE
+                      tvTabSongs.setTextColor(resources.getColor(R.color.text_white))
+                      tvTabFolders.setTextColor(resources.getColor(R.color.text_light_gray))
+                      tvTabPlaylists.setTextColor(resources.getColor(R.color.text_light_gray))
+                      indSongs.setBackgroundColor(resources.getColor(R.color.dub_red))
+                      indFolders.setBackgroundColor(android.R.color.transparent)
+                      indPlaylists.setBackgroundColor(android.R.color.transparent)
+                      adapterSongs?.updateList(allSongs)
+                  }
+                  tabFolders.setOnClickListener {
+                      rvSongs.visibility = View.GONE; rvFolders.visibility = View.VISIBLE; layoutPlaylists.visibility = View.GONE
+                      tvTabSongs.setTextColor(resources.getColor(R.color.text_light_gray))
+                      tvTabFolders.setTextColor(resources.getColor(R.color.text_white))
+                      tvTabPlaylists.setTextColor(resources.getColor(R.color.text_light_gray))
+                      indSongs.setBackgroundColor(android.R.color.transparent)
+                      indFolders.setBackgroundColor(resources.getColor(R.color.dub_red))
+                      indPlaylists.setBackgroundColor(android.R.color.transparent)
+                      loadFolders()
+                  }
+                  tabPlaylists.setOnClickListener {
+                      rvSongs.visibility = View.GONE; rvFolders.visibility = View.GONE; layoutPlaylists.visibility = View.VISIBLE
+                      tvTabSongs.setTextColor(resources.getColor(R.color.text_light_gray))
+                      tvTabFolders.setTextColor(resources.getColor(R.color.text_light_gray))
+                      tvTabPlaylists.setTextColor(resources.getColor(R.color.text_white))
+                      indSongs.setBackgroundColor(android.R.color.transparent)
+                      indFolders.setBackgroundColor(android.R.color.transparent)
+                      indPlaylists.setBackgroundColor(resources.getColor(R.color.dub_red))
+                      loadPlaylists()
+                  }
+              }
+
+              private fun setupPlayerControls() {
+                  btnMiniPlay.setOnClickListener { togglePlayPause() }
+                  btnPlay.setOnClickListener { togglePlayPause() }
+                  findViewById<View>(R.id.btnPrev).setOnClickListener { playPreviousSong() }
+                  findViewById<View>(R.id.btnNext).setOnClickListener { playNextSong() }
+                  miniPlayer.setOnClickListener { playerScreen.visibility = View.VISIBLE }
+                  findViewById<View>(R.id.btnBack).setOnClickListener { playerScreen.visibility = View.GONE }
+                  seekBarPlay.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                      override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                          if (fromUser) mediaPlayer?.seekTo(progress)
+                      }
+                      override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                      override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+                  })
+              }
+
+              private fun setupFavoritesAndPlaylists() {
+                  fabAddPlaylist.setOnClickListener {
+                      val input = EditText(this); input.hint = "اسم قائمة التشغيل"
+                      AlertDialog.Builder(this).setTitle("إنشاء قائمة جديدة").setView(input)
+                          .setPositiveButton("إنشاء") { _, _ ->
+                              val name = input.text.toString().trim()
+                              if (name.isNotEmpty()) { customPlaylists[name] = mutableListOf(); loadPlaylists() }
+                          }.setNegativeButton("إلغاء", null).show()
+                  }
+              }
+
+              private fun checkPermissions() {
+                  val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
+                  if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+                      ActivityCompat.requestPermissions(this, arrayOf(permission), PERMISSION_REQUEST_CODE)
+                  } else loadSongs()
+              }
+
+              override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+                  super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+                  if (requestCode == PERMISSION_REQUEST_CODE && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) loadSongs()
+              }
+
+              private fun loadSongs() {
+                  val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                  val projection = arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.DATA)
+                  val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+                  val sharedPref = getSharedPreferences("Favs", Context.MODE_PRIVATE)
+                  val favIds = sharedPref.getStringSet("favorite_ids", emptySet()) ?: emptySet()
+
+                  contentResolver.query(uri, projection, selection, null, "${MediaStore.Audio.Media.TITLE} ASC")?.use { cursor ->
+                      while (cursor.moveToNext()) {
+                          val id = cursor.getLong(0); val title = cursor.getString(1); val artist = cursor.getString(2) ?: "Unknown Artist"; val path = cursor.getString(3)
+                          val folder = File(path).parentFile?.name ?: "Unknown"
+
+                          val song = Song(id, title, artist, path, folder)
+                          if (favIds.contains(id.toString())) {
+                              song.isFavorite = true
+                          }
+                          allSongs.add(song)
+
+                          if (!foldersMap.containsKey(folder)) {
+                              foldersMap[folder] = mutableListOf()
+                          }
+                          foldersMap[folder]?.add(song)
+                      }
+                  }
+
+                  currentPlaylist.addAll(allSongs)
+
+                  adapterSongs = SongAdapter(allSongs, { song ->
+                      currentPlaylist = allSongs
+                      currentSongIndex = currentPlaylist.indexOf(song)
+                      playSong(song)
+                  }, { song, pos ->
+                      song.isFavorite = !song.isFavorite
+                      saveFavoriteState(song)
+                      adapterSongs?.notifyItemChanged(pos)
+                  })
+                  rvSongs.adapter = adapterSongs
+              }
+
+              private fun saveFavoriteState(song: Song) {
+                  val sharedPref = getSharedPreferences("Favs", Context.MODE_PRIVATE)
+                  val currentFavs = sharedPref.getStringSet("favorite_ids", emptySet())?.toMutableSet() ?: HashSet()
+                  if (song.isFavorite) {
+                      currentFavs.add(song.id.toString())
+                  } else {
+                      currentFavs.remove(song.id.toString())
+                  }
+                  sharedPref.edit().putStringSet("favorite_ids", currentFavs).apply()
+              }
+
+              private fun loadFolders() {
+                  val folderList = foldersMap.map { it.key to it.value }
+                  rvFolders.adapter = FolderAdapter(folderList) { songs ->
+                      rvSongs.visibility = View.VISIBLE
+                      rvFolders.visibility = View.GONE
+                      adapterSongs?.updateList(songs)
+                  }
+              }
+
+              private fun loadPlaylists() {
+                  val favorites = allSongs.filter { it.isFavorite }
+                  val playlistItems = mutableListOf<Pair<String, List<Song>>>()
+                  playlistItems.add("المفضلة" to favorites)
+
+                  customPlaylists.forEach { (name, songs) ->
+                      playlistItems.add(name to songs)
+                  }
+
+                  rvPlaylists.adapter = PlaylistAdapter(playlistItems) { songs ->
+                      if (songs.isNotEmpty()) {
+                          rvSongs.visibility = View.VISIBLE
+                          layoutPlaylists.visibility = View.GONE
+                          adapterSongs?.updateList(songs)
+                      } else {
+                          Toast.makeText(this, "قائمة التشغيل هذه فارغة حالياً", Toast.LENGTH_SHORT).show()
+                      }
+                  }
+              }
+
+              private fun setupAudioEffects(sessionId: Int) {
+                  try {
+                      equalizer = Equalizer(0, sessionId)
+                      equalizer?.enabled = true
+                      bassBoost = BassBoost(0, sessionId)
+                      bassBoost?.enabled = true
+                      virtualizer = Virtualizer(0, sessionId)
+                      virtualizer?.enabled = true
+                  } catch (e: Exception) {
+                      e.printStackTrace()
+                  }
+              }
+              
+              private fun releaseAudioEffects() {
+                  equalizer?.release()
+                  equalizer = null
+                  bassBoost?.release()
+                  bassBoost = null
+                  virtualizer?.release()
+                  virtualizer = null
+              }
+
+              private fun playSong(song: Song) {
+                  try {
+                      if (mediaPlayer == null) {
+                          mediaPlayer = MediaPlayer()
+                      } else {
+                          mediaPlayer?.reset()
+                      }
+
+                      mediaPlayer?.setDataSource(song.path)
+                      mediaPlayer?.prepare()
+                      
+                      releaseAudioEffects()
+                      mediaPlayer?.audioSessionId?.let { setupAudioEffects(it) }
+                      
+                      mediaPlayer?.start()
+
+                      miniPlayer.visibility = View.VISIBLE
+                      tvMiniTitle.text = song.title
+                      tvMiniArtist.text = song.artist
+                      btnMiniPlay.setImageResource(android.R.drawable.ic_media_pause)
+
+                      tvFullTitle.text = song.title
+                      tvFullArtist.text = song.artist
+                      btnPlay.setImageResource(android.R.drawable.ic_media_pause)
+
+                      seekBarPlay.max = mediaPlayer?.duration ?: 0
+                      updateSeekBar()
+
+                      mediaPlayer?.setOnCompletionListener {
+                          playNextSong()
+                      }
+
+                  } catch (e: IOException) {
+                      Toast.makeText(this, "حدث خطأ أثناء تشغيل الملف", Toast.LENGTH_SHORT).show()
+                  }
+              }
+
+              private fun togglePlayPause() {
+                  mediaPlayer?.let { player ->
+                      if (player.isPlaying) {
+                          player.pause()
+                          btnMiniPlay.setImageResource(android.R.drawable.ic_media_play)
+                          btnPlay.setImageResource(android.R.drawable.ic_media_play)
+                      } else {
+                          player.start()
+                          btnMiniPlay.setImageResource(android.R.drawable.ic_media_pause)
+                          btnPlay.setImageResource(android.R.drawable.ic_media_pause)
+                          updateSeekBar()
+                      }
+                  }
+              }
+
+              private fun playNextSong() {
+                  if (currentPlaylist.isNotEmpty() && currentSongIndex < currentPlaylist.size - 1) {
+                      currentSongIndex++
+                      playSong(currentPlaylist[currentSongIndex])
+                  }
+              }
+
+              private fun playPreviousSong() {
+                  if (currentPlaylist.isNotEmpty() && currentSongIndex > 0) {
+                      currentSongIndex--
+                      playSong(currentPlaylist[currentSongIndex])
+                  }
+              }
+
+              private fun updateSeekBar() {
+                  mediaPlayer?.let { player ->
+                      if (player.isPlaying) {
+                          val current = player.currentPosition
+                          seekBarPlay.progress = current
+                          tvCurrentTime.text = formatTime(current)
+                          tvTotalTime.text = "-" + formatTime(player.duration - current)
+
+                          val rotate = RotateAnimation(0f, 360f, RotateAnimation.RELATIVE_TO_SELF, 0.5f, RotateAnimation.RELATIVE_TO_SELF, 0.5f)
+                          rotate.duration = 60000
+                          knobOuter.startAnimation(rotate)
+
+                          handler.postDelayed({ updateSeekBar() }, 1000)
+                      }
+                  }
+              }
+
+              private fun formatTime(ms: Int): String {
+                  val totalSec = ms / 1000
+                  val min = totalSec / 60
+                  val sec = totalSec % 60
+                  return String.format("%02d:%02d", min, sec)
+              }
+
+              override fun onDestroy() {
+                  super.onDestroy()
+                  releaseAudioEffects()
+                  mediaPlayer?.release()
+                  mediaPlayer = null
+                  handler.removeCallbacksAndMessages(null)
+              }
+          }
+          EOF
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: '8.2'
+
+      - name: Build Debug APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
